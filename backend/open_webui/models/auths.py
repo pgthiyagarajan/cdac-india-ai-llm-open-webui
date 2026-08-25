@@ -77,6 +77,9 @@ class SignupForm(BaseModel):
     email: str
     password: str
     profile_image_url: str | None = '/user.png'
+    department: str | None = None
+    designation: str | None = None
+    mobile_number: str | None = None
 
     @field_validator('profile_image_url')
     @classmethod
@@ -104,6 +107,9 @@ class AuthsTable:
         profile_image_url: str = '/user.png',
         role: str = 'pending',
         oauth: dict | None = None,
+        department: str | None = None,
+        designation: str | None = None,
+        mobile_number: str | None = None,
         db: AsyncSession | None = None,
     ) -> UserModel | None:
         """Create an Auth + User pair inside a single transaction."""
@@ -127,6 +133,9 @@ class AuthsTable:
                 profile_image_url,
                 role,
                 oauth=oauth,
+                department=department,
+                designation=designation,
+                mobile_number=mobile_number,
                 db=session,
             )
             # persist both records and reload generated defaults

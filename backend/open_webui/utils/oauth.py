@@ -1585,6 +1585,7 @@ class OAuthManager:
             raise HTTPException(404)
 
         error_message = None
+        is_new_user = False
         try:
             client = self.get_client(provider)
 
@@ -1787,9 +1788,8 @@ class OAuthManager:
                         await Users.update_user_oauth_by_id(user.id, provider, sub, db=db)
 
             if user:
+                is_new_user = False
                 determined_role = await self.get_user_role(user, user_data)
-                if determined_role == 'pending':
-                    determined_role = 'user'
                 if user.role != determined_role:
                     await Users.update_user_role_by_id(user.id, determined_role, db=db)
                     # Update the user object in memory as well,
@@ -1859,8 +1859,7 @@ class OAuthManager:
                         name = email
 
                     new_role = await self.get_user_role(None, user_data)
-                    if new_role == 'pending':
-                        new_role = 'user'
+                    is_new_user = True
                     user = await Auths.insert_new_auth(
                         email=email,
                         password=get_password_hash(str(uuid.uuid4())),  # Random password, not used
@@ -1927,6 +1926,16 @@ class OAuthManager:
         if error_message:
             redirect_url = f'{redirect_url}?error={urllib.parse.quote_plus(error_message)}'
             return RedirectResponse(url=redirect_url, headers=response.headers)
+
+        if is_new_user:
+            new_user_qs = urllib.parse.urlencode(
+                {
+                    'new_user': '1',
+                    'name': user.name,
+                    'email': user.email,
+                }
+            )
+            redirect_url = f'{redirect_url}?{new_user_qs}'
 
         response = RedirectResponse(url=redirect_url, headers=response.headers)
 

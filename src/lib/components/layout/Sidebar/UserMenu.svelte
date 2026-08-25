@@ -32,6 +32,8 @@
 	import SignOut from '$lib/components/icons/SignOut.svelte';
 	import FaceSmile from '$lib/components/icons/FaceSmile.svelte';
 	import UserStatusModal from './UserStatusModal.svelte';
+	import SubmitFeedbackModal from './SubmitFeedbackModal.svelte';
+	import ChatBubbleOval from '$lib/components/icons/ChatBubbleOval.svelte';
 	import Emoji from '$lib/components/common/Emoji.svelte';
 	import XMark from '$lib/components/icons/XMark.svelte';
 	import Note from '$lib/components/icons/Note.svelte';
@@ -54,6 +56,7 @@
 	export let showActiveUsers = true;
 
 	let showUserStatusModal = false;
+	let showSubmitFeedbackModal = false;
 	let shiftKey = false;
 
 	const dispatch = createEventDispatcher();
@@ -116,6 +119,7 @@
 		user.set(await getSessionUser(localStorage.token));
 	}}
 />
+<SubmitFeedbackModal bind:show={showSubmitFeedbackModal} />
 
 <Dropdown bind:show onOpenChange={handleDropdownChange} {align}>
 	<slot />
@@ -402,6 +406,7 @@
 				</div>
 			{/if}
 
+
 			{#if $config?.features?.enable_calendar && ($user?.role === 'admin' || $user?.permissions?.features?.calendar)}
 				<div class="flex items-center w-full">
 					<a
@@ -616,6 +621,24 @@
 					<div class=" self-center truncate">{$i18n.t('Keyboard shortcuts')}</div>
 				</button>
 			{/if}
+
+			<!-- Unconditional (not gated by `help`) — the two bottom-left
+			     Sidebar.svelte invocations of this menu don't pass help={true}
+			     (only Navbar.svelte's top-right one does), but Submit Feedback
+			     should be reachable from every instance of this menu. -->
+			<button
+				class="flex rounded-xl py-1.5 px-3 w-full hover:bg-gray-50 dark:hover:bg-gray-800 transition cursor-pointer select-none"
+				type="button"
+				on:click={() => {
+					show = false;
+					showSubmitFeedbackModal = true;
+				}}
+			>
+				<div class=" self-center mr-3">
+					<ChatBubbleOval className="size-5" />
+				</div>
+				<div class=" self-center truncate">{$i18n.t('Submit Feedback')}</div>
+			</button>
 
 			<hr class=" border-gray-50/30 dark:border-gray-800/30 my-1 p-0" />
 

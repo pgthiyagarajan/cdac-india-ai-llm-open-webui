@@ -35,44 +35,12 @@
 	let loaded = false;
 	let loggingIn = false;
 
-	// Registration & Sign-in Guide panel. The open/closed intent is kept in
-	// localStorage (keyed per-origin) so it survives navigation between our
-	// own pages (landing page <-> here) and the round-trip through the
-	// external Parichay SSO redirect — we can't inject our panel into
-	// Parichay's own hosted page, but the guide reopens the moment control
-	// returns to our app, and closes automatically on successful sign-in.
-	const SIGNIN_GUIDE_STORAGE_KEY = 'bharatai_signin_guide_open';
-	let showManual = false;
-	let manualFrameSrc = '';
-
-	const openManual = () => {
-		showManual = true;
-		if (!manualFrameSrc) {
-			manualFrameSrc = '/static/user-manual-signin.pdf#zoom=100';
-		}
-		try {
-			localStorage.setItem(SIGNIN_GUIDE_STORAGE_KEY, '1');
-		} catch (e) {}
-	};
-
-	const closeManual = () => {
-		showManual = false;
-		try {
-			localStorage.removeItem(SIGNIN_GUIDE_STORAGE_KEY);
-		} catch (e) {}
-	};
-
-	const handleManualKeydown = (e: KeyboardEvent) => {
-		if (e.key === 'Escape' && showManual) {
-			closeManual();
-		}
-	};
-
 	let mode = $config?.features.enable_ldap ? 'ldap' : 'signin';
 
-	// Controls whether the Open WebUI email/password form is expanded,
-	// or whether we're showing the two "Continue with..." entry buttons
-	let showLoginForm = false;
+	// This page (/staff) is the internal-only credential sign-in page — it
+	// opens straight on the email/password form rather than the public
+	// chooser (the "Back" button still lets you reach the chooser manually).
+	let showLoginForm = true;
 
 	let form = null;
 
@@ -164,10 +132,6 @@
 
 	const setSessionUser = async (sessionUser, redirectPath: string | null = null) => {
 		if (sessionUser) {
-			// Successful sign-in: the Registration & Sign-in Guide (if open)
-			// should close itself automatically rather than following the user
-			// into the app.
-			closeManual();
 			console.log(sessionUser);
 			toast.success($i18n.t(`You're now logged in.`));
 			if (sessionUser.token) {
@@ -383,76 +347,13 @@
 		await oauthCallbackHandler();
 		form = $page.url.searchParams.get('form');
 
-		const modeParam = $page.url.searchParams.get('mode');
-
-		// "Sign up" entry point (landing page): skip the chooser, show the form
-		// directly in signup mode. Doesn't apply if we're mid-way through
-		// completing a post-Parichay profile (oauthCallbackHandler already set that).
-		// If direct signup is disabled server-side (enable_signup=false), submitting
-		// this form would just fail with a 403 — fall back to the chooser instead.
-		if (modeParam === 'signup' && mode !== 'signup-complete') {
-			if ($config?.features?.enable_signup) {
-				showLoginForm = true;
-				mode = 'signup';
-			} else {
-				toast.error(
-					$i18n.t('New sign-ups are currently disabled. Please contact your administrator.')
-				);
-			}
-		}
-
-		// "Sign in" entry point (landing page, default /auth hit): skip the
-		// chooser and go straight to Parichay SSO. The old chooser stays
-		// reachable via /auth?form=1. Suppressed when we're already handling an
-		// OAuth callback / signup-complete flow, an explicit ?mode= was given,
-		// or the user already has a session/token.
-		if (
-			!modeParam &&
-			!form &&
-			!error &&
-			mode !== 'signup-complete' &&
-			!$user &&
-			!localStorage.token &&
-			!document.cookie.split('; ').some((c) => c.startsWith('token='))
-		) {
-			window.location.replace(`${WEBUI_BASE_URL}/oauth/parichay/login`);
-			return;
-		}
-
-		// Auto-redirect to SSO when OAUTH_AUTO_REDIRECT is enabled and the
-		// deployment is unambiguously SSO-only (single provider, no login form,
-		// no LDAP). Suppressed by ?form=, ?error=, onboarding, trusted-header
-		// auth, or an existing session/token.
-		if ($config?.oauth?.auto_redirect && !form && !error) {
-			const providers = Object.keys($config?.oauth?.providers ?? {});
-			if (
-				providers.length === 1 &&
-				$config?.features?.auth !== false &&
-				$config?.features?.enable_login_form === false &&
-				!$config?.features?.enable_ldap &&
-				!$config?.features?.auth_trusted_header &&
-				!$config?.onboarding &&
-				!localStorage.token &&
-				!document.cookie.split('; ').some((c) => c.startsWith('token='))
-			) {
-				window.location.href = `${WEBUI_BASE_URL}/oauth/${providers[0]}/login`;
-				return;
-			}
-		}
+		// /staff is the internal credential-login page — it intentionally does
+		// NOT auto-redirect to Parichay or any SSO provider, and does not honor
+		// ?mode=signup. It always opens on the plain sign-in form above.
 
 		loaded = true;
 		setLogoImage();
 		refreshCaptcha();
-
-		// Reopen the Registration & Sign-in Guide if the user had it open
-		// before navigating here (from the landing page, or from before an
-		// SSO round-trip that brought them back to this page).
-		try {
-			if (localStorage.getItem(SIGNIN_GUIDE_STORAGE_KEY) === '1') {
-				manualFrameSrc = '/static/user-manual-signin.pdf#zoom=100';
-				showManual = true;
-			}
-		} catch (e) {}
 
 		if (($config?.features?.auth_trusted_header ?? false) || $config?.features?.auth === false) {
 			await signInHandler();
@@ -475,8 +376,6 @@
 		mode = $config?.features.enable_ldap ? 'ldap' : 'signup';
 	}}
 />
-
-<svelte:window on:keydown={handleManualKeydown} />
 
 <div
 	class="w-full min-h-screen flex items-center justify-center p-4 md:p-8 text-white relative overflow-hidden"
@@ -508,11 +407,7 @@
 	{#if loaded}
 		<!-- Main Floating Glass Container -->
 		<div
-			class="w-full {showManual
-				? 'max-w-md'
-				: 'max-w-5xl'} min-h-[600px] md:min-h-[680px] max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-4rem)] my-auto rounded-3xl overflow-hidden border border-white/10 bg-white/[0.03] backdrop-blur-2xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] flex flex-col md:flex-row z-10 transition-[max-width,transform] duration-500 ease-out {showManual
-				? 'md:-translate-x-[18vw]'
-				: ''}"
+			class="w-full max-w-5xl min-h-[600px] md:min-h-[680px] max-h-[calc(100vh-2rem)] md:max-h-[calc(100vh-4rem)] my-auto rounded-3xl overflow-hidden border border-white/10 bg-white/[0.03] backdrop-blur-2xl shadow-[0_25px_50px_-12px_rgba(0,0,0,0.5)] flex flex-col md:flex-row z-10"
 		>
 			{#if ($config?.features.auth_trusted_header ?? false) || $config?.features.auth === false}
 				<div class="w-full h-full flex flex-col justify-center items-center bg-transparent">
@@ -531,9 +426,7 @@
 					</div>
 				</div>
 			{:else}
-				<!-- Left Panel (Info & Highlights) — hidden while the guide is
-				     open so the form container can shrink down to just itself. -->
-				{#if !showManual}
+				<!-- Left Panel (Info & Highlights) -->
 				<div
 					class="w-full md:w-[55%] min-h-full flex flex-col justify-between p-6 md:p-8 border-b md:border-b-0 md:border-r border-white/10 relative overflow-hidden bg-white/[0.01]"
 				>
@@ -584,13 +477,10 @@
 						<span>Designed and Developed by C-DAC</span>
 					</div>
 				</div>
-				{/if}
 
 				<!-- Right Panel (Login Form) -->
 				<div
-					class="w-full {showManual
-						? 'md:w-full'
-						: 'md:w-[45%]'} min-h-full flex flex-col items-center p-5 md:p-6 bg-black/10 dark:bg-black/30 backdrop-blur-md relative overflow-y-auto"
+					class="w-full md:w-[45%] min-h-full flex flex-col items-center p-5 md:p-6 bg-black/10 dark:bg-black/30 backdrop-blur-md relative overflow-y-auto"
 				>
 					<div class="w-full max-w-md my-auto z-10">
 						<!-- Official Logos Row -->
@@ -642,6 +532,188 @@
 						{/if}
 
 						<div class="grid">
+						{#if !showLoginForm}
+							<!-- Entry buttons: Continue with Parichay / Continue with Open WebUI -->
+							<div
+								class="col-start-1 row-start-1 flex flex-col space-y-3 mt-2"
+								in:fly={{ y: 10, duration: 360, delay: 90, easing: quintOut }}
+								out:fly={{ y: -10, duration: 260, easing: quintOut }}
+							>
+								<button
+									type="button"
+									class="flex justify-center items-center bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 hover:border-orange-500/30 active:scale-[0.98] transition-all duration-200 w-full rounded-xl font-medium text-base py-3.5"
+									on:click={() => {
+										window.location.replace(`${WEBUI_BASE_URL}/oauth/parichay/login`);
+									}}
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										fill="none"
+										viewBox="0 0 24 24"
+										stroke-width="1.5"
+										stroke="currentColor"
+										class="size-6 mr-3"
+										aria-hidden="true"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.57-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"
+										/>
+									</svg>
+									<span>{$i18n.t('Continue with {{provider}}', { provider: 'Parichay' })}</span>
+								</button>
+
+								<div class="inline-flex items-center justify-center w-full">
+									<hr class="w-full h-px border-0 bg-white/10" />
+									<span class="px-3 text-xs font-medium text-gray-400 bg-transparent shrink-0"
+										>{$i18n.t('OR')}</span
+									>
+									<hr class="w-full h-px border-0 bg-white/10" />
+								</div>
+
+								<button
+									type="button"
+									class="flex justify-center items-center bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 hover:border-orange-500/30 active:scale-[0.98] transition-all duration-200 w-full rounded-xl font-medium text-base py-3.5"
+									on:click={() => {
+										showLoginForm = true;
+									}}
+								>
+									<img
+										src="/open-webui-logo.png"
+										alt="open-webui-logo"
+										class="w-6 h-6 rounded-full mr-3"
+									/>
+									<span>{$i18n.t('Continue with {{provider}}', { provider: 'Open WebUI' })}</span>
+								</button>
+
+								{#if Object.keys($config?.oauth?.providers ?? {}).length > 0}
+									<div class="flex flex-col space-y-2 !mt-3">
+										{#if $config?.oauth?.providers?.google}
+											<button
+												class="flex justify-center items-center bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 transition duration-200 w-full rounded-xl font-medium text-sm py-2.5"
+												on:click={() => {
+													window.location.href = `${WEBUI_BASE_URL}/oauth/google/login`;
+												}}
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													viewBox="0 0 48 48"
+													class="size-6 mr-3"
+													aria-hidden="true"
+												>
+													<path
+														fill="#EA4335"
+														d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+													/><path
+														fill="#4285F4"
+														d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"
+													/><path
+														fill="#FBBC05"
+														d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"
+													/><path
+														fill="#34A853"
+														d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+													/><path fill="none" d="M0 0h48v48H0z" />
+												</svg>
+												<span>{$i18n.t('Continue with {{provider}}', { provider: 'Google' })}</span>
+											</button>
+										{/if}
+										{#if $config?.oauth?.providers?.microsoft}
+											<button
+												class="flex justify-center items-center bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 transition duration-200 w-full rounded-xl font-medium text-sm py-2.5"
+												on:click={() => {
+													window.location.href = `${WEBUI_BASE_URL}/oauth/microsoft/login`;
+												}}
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													viewBox="0 0 21 21"
+													class="size-6 mr-3"
+													aria-hidden="true"
+												>
+													<rect x="1" y="1" width="9" height="9" fill="#f25022" /><rect
+														x="1"
+														y="11"
+														width="9"
+														height="9"
+														fill="#00a4ef"
+													/><rect x="11" y="1" width="9" height="9" fill="#7fba00" /><rect
+														x="11"
+														y="11"
+														width="9"
+														height="9"
+														fill="#ffb900"
+													/>
+												</svg>
+												<span>{$i18n.t('Continue with {{provider}}', { provider: 'Microsoft' })}</span>
+											</button>
+										{/if}
+										{#if $config?.oauth?.providers?.github}
+											<button
+												class="flex justify-center items-center bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 transition duration-200 w-full rounded-xl font-medium text-sm py-2.5"
+												on:click={() => {
+													window.location.href = `${WEBUI_BASE_URL}/oauth/github/login`;
+												}}
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													viewBox="0 0 24 24"
+													class="size-6 mr-3"
+													aria-hidden="true"
+												>
+													<path
+														fill="currentColor"
+														d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.92 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57C20.565 21.795 24 17.31 24 12c0-6.63-5.37-12-12-12z"
+													/>
+												</svg>
+												<span>{$i18n.t('Continue with {{provider}}', { provider: 'GitHub' })}</span>
+											</button>
+										{/if}
+										{#if $config?.oauth?.providers?.oidc}
+											<button
+												class="flex justify-center items-center bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 transition duration-200 w-full rounded-xl font-medium text-sm py-2.5"
+												on:click={() => {
+													window.location.href = `${WEBUI_BASE_URL}/oauth/oidc/login`;
+												}}
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke-width="1.5"
+													stroke="currentColor"
+													class="size-6 mr-3"
+													aria-hidden="true"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z"
+													/>
+												</svg>
+
+												<span
+													>{$i18n.t('Continue with {{provider}}', {
+														provider: $config?.oauth?.providers?.oidc ?? 'SSO'
+													})}</span
+												>
+											</button>
+										{/if}
+										{#if $config?.oauth?.providers?.feishu}
+											<button
+												class="flex justify-center items-center bg-white/[0.04] hover:bg-white/[0.08] text-gray-300 hover:text-white border border-white/10 transition duration-200 w-full rounded-xl font-medium text-sm py-2.5"
+												on:click={() => {
+													window.location.href = `${WEBUI_BASE_URL}/oauth/feishu/login`;
+												}}
+											>
+												<span>{$i18n.t('Continue with {{provider}}', { provider: 'Feishu' })}</span>
+											</button>
+										{/if}
+									</div>
+								{/if}
+							</div>
+						{:else}
 						<form
 							class="col-start-1 row-start-1 flex flex-col justify-center"
 							action="."
@@ -653,7 +725,28 @@
 								submitHandler();
 							}}
 						>
-							{#if $config?.features.enable_login_form || form || mode === 'signup-complete'}
+							<button
+								type="button"
+								class="flex items-center text-xs text-gray-400 hover:text-orange-400 transition duration-200 mb-3 -mt-1"
+								on:click={() => {
+									showLoginForm = false;
+								}}
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									fill="none"
+									viewBox="0 0 24 24"
+									stroke-width="2"
+									stroke="currentColor"
+									class="size-3.5 mr-1"
+									aria-hidden="true"
+								>
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+								</svg>
+								{$i18n.t('Back')}
+							</button>
+
+							{#if $config?.features.enable_login_form || $config?.features.enable_ldap || form || mode === 'signup-complete'}
 								<div class="flex flex-col space-y-2.5">
 									{#if mode === 'signup' || mode === 'signup-complete'}
 										<div>
@@ -972,46 +1065,54 @@
 							{/if}
 
 							<div class="mt-3">
-								{#if $config?.features.enable_login_form || form || mode === 'signup-complete'}
-									<button
-										class="bg-linear-to-r from-orange-600 via-orange-500 to-amber-500 hover:from-orange-500 hover:via-orange-400 hover:to-amber-400 text-white font-semibold text-sm py-2.5 w-full rounded-xl shadow-lg shadow-orange-500/25 hover:shadow-xl hover:shadow-orange-500/35 active:scale-[0.98] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-orange-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b] transition-all duration-200"
-										type="submit"
-									>
-										{mode === 'signup-complete'
-											? $i18n.t('Complete Profile')
-											: ($config?.onboarding ?? false)
-												? $i18n.t('Create Admin Account')
-												: $i18n.t('Create Account')}
-									</button>
+								{#if $config?.features.enable_login_form || $config?.features.enable_ldap || form || mode === 'signup-complete'}
+									{#if mode === 'ldap'}
+										<button
+											class="bg-linear-to-r from-orange-600 via-orange-500 to-amber-500 hover:from-orange-500 hover:via-orange-400 hover:to-amber-400 text-white font-semibold text-sm py-2.5 w-full rounded-xl shadow-lg shadow-orange-500/25 hover:shadow-xl hover:shadow-orange-500/35 active:scale-[0.98] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-orange-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b] transition-all duration-200"
+											type="submit"
+										>
+											{$i18n.t('Authenticate')}
+										</button>
+									{:else}
+										<button
+											class="bg-linear-to-r from-orange-600 via-orange-500 to-amber-500 hover:from-orange-500 hover:via-orange-400 hover:to-amber-400 text-white font-semibold text-sm py-2.5 w-full rounded-xl shadow-lg shadow-orange-500/25 hover:shadow-xl hover:shadow-orange-500/35 active:scale-[0.98] focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-orange-400/60 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06070b] transition-all duration-200"
+											type="submit"
+										>
+											{mode === 'signin'
+												? $i18n.t('Sign in')
+												: mode === 'signup-complete'
+													? $i18n.t('Complete Profile')
+													: ($config?.onboarding ?? false)
+														? $i18n.t('Create Admin Account')
+														: $i18n.t('Create Account')}
+										</button>
 
-									{#if $config?.features.enable_signup && !($config?.onboarding ?? false) && mode !== 'signup-complete'}
-										<div class=" mt-4 text-xs text-center text-gray-400">
-											{$i18n.t('Already have an account?')}
+										{#if $config?.features.enable_signup && !($config?.onboarding ?? false) && mode !== 'signup-complete'}
+											<div class=" mt-4 text-xs text-center text-gray-400">
+												{mode === 'signin'
+													? $i18n.t("Don't have an account?")
+													: $i18n.t('Already have an account?')}
 
-											<button
-												class="text-orange-400 hover:text-orange-300 font-semibold underline ml-1"
-												type="button"
-												on:click={() => {
-													window.location.replace(`${WEBUI_BASE_URL}/oauth/parichay/login`);
-												}}
-											>
-												{$i18n.t('Sign in')}
-											</button>
-										</div>
+												<button
+													class="text-orange-400 hover:text-orange-300 font-semibold underline ml-1"
+													type="button"
+													on:click={() => {
+														if (mode === 'signin') {
+															// /staff is the internal credential sign-in page only —
+															// registration belongs on the public /auth page.
+															goto('/auth?mode=signup');
+														} else {
+															mode = 'signin';
+														}
+													}}
+												>
+													{mode === 'signin' ? $i18n.t('Sign up') : $i18n.t('Sign in')}
+												</button>
+											</div>
+										{/if}
 									{/if}
 								{/if}
 							</div>
-
-							<button
-								type="button"
-								class="block w-full mt-3 text-center text-xs text-gray-400 hover:text-white transition-colors duration-150"
-								on:click={openManual}
-							>
-								{$i18n.t('Trouble signing in?')}
-								<span class="text-amber-400 font-semibold underline underline-offset-2"
-									>{$i18n.t('Click here')}</span
-								>
-							</button>
 
 							<div class="flex justify-center mt-4">
 								<img
@@ -1021,45 +1122,34 @@
 								/>
 							</div>
 						</form>
+						{/if}
 						</div>
+
+						{#if $config?.features.enable_ldap && $config?.features.enable_login_form}
+							<div class="mt-4 text-center">
+								<button
+									class="text-xs underline text-gray-400 hover:text-orange-400 transition duration-200"
+									type="button"
+									on:click={() => {
+										if (mode === 'ldap')
+											mode = ($config?.onboarding ?? false) ? 'signup' : 'signin';
+										else mode = 'ldap';
+									}}
+								>
+									<span
+										>{mode === 'ldap'
+											? $i18n.t('Continue with Email')
+											: $i18n.t('Continue with LDAP')}</span
+									>
+								</button>
+							</div>
+						{/if}
 					</div>
 				</div>
 			{/if}
 		</div>
 
 	{/if}
-</div>
-
-<!-- Registration & Sign-in Guide panel — fixed overlay, same behavior as the
-     landing page's version (native browser PDF viewer for scroll/zoom). -->
-<div
-	class="fixed top-0 right-0 h-full {showManual
-		? 'w-full md:w-[44%]'
-		: 'w-0'} overflow-hidden bg-[#0a0b10] border-l border-white/10 shadow-[-12px_0_40px_rgba(0,0,0,0.35)] flex flex-col z-[9990] transition-[width] duration-500 ease-in-out"
-	aria-hidden={!showManual}
->
-	<div class="flex items-center justify-between gap-4 px-6 py-4 border-b border-white/10 bg-black/20 shrink-0">
-		<h3 class="text-white font-semibold text-base truncate">
-			{$i18n.t('Registration & Sign-in Guide')}
-		</h3>
-		<button
-			type="button"
-			class="w-8 h-8 shrink-0 rounded-full bg-red-500 hover:bg-red-600 text-white flex items-center justify-center text-xl leading-none transition-colors duration-150"
-			on:click={closeManual}
-			aria-label={$i18n.t('Close user guide')}
-		>
-			&times;
-		</button>
-	</div>
-	<div class="flex-1 min-h-0 bg-[#0d0d0d]">
-		{#if manualFrameSrc}
-			<iframe
-				title="Registration and Sign-in User Guide"
-				src={manualFrameSrc}
-				class="w-full h-full border-0 block"
-			></iframe>
-		{/if}
-	</div>
 </div>
 
 <!-- Terms and Conditions Modal -->

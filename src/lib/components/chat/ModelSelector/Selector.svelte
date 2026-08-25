@@ -11,7 +11,9 @@
 	import { flyAndScale } from '$lib/utils/transitions';
 
 	import { createEventDispatcher, onMount, getContext, tick } from 'svelte';
+	import { fly } from 'svelte/transition';
 	import { goto } from '$app/navigation';
+	import { WEBUI_API_BASE_URL } from '$lib/constants';
 
 	import { deleteModel, getOllamaVersion, pullModel } from '$lib/apis/ollama';
 	import { unloadModel } from '$lib/apis';
@@ -219,6 +221,45 @@
 					})
 	).filter((item) => !(item.model?.info?.meta?.hidden ?? false));
 
+	// Collapse models that share a tag into a single group row (shown only in the
+	// unfiltered "All" view). Hovering the group row reveals its models in a flyout.
+	$: displayItems = (() => {
+		if (selectedTag !== '') {
+			return filteredItems.map((item) => ({ type: 'model', item }));
+		}
+
+		const seenTagKeys = new Set();
+		const result = [];
+
+		for (const item of filteredItems) {
+			const groupTagName = (item.model?.tags ?? [])[0]?.name;
+
+			if (!groupTagName) {
+				result.push({ type: 'model', item });
+				continue;
+			}
+
+			const tagKey = groupTagName.toLowerCase();
+			if (seenTagKeys.has(tagKey)) {
+				continue;
+			}
+			seenTagKeys.add(tagKey);
+
+			const groupItems = filteredItems.filter(
+				(i) => (i.model?.tags ?? [])[0]?.name?.toLowerCase() === tagKey
+			);
+
+			result.push({
+				type: 'group',
+				value: `group:${tagKey}`,
+				label: groupTagName,
+				items: groupItems
+			});
+		}
+
+		return result;
+	})();
+
 	$: if (
 		selectedTag !== undefined ||
 		selectedConnectionType !== undefined ||
@@ -230,7 +271,9 @@
 	const resetView = async () => {
 		await tick();
 
-		const selectedInFiltered = filteredItems.findIndex((item) => item.value === value);
+		const selectedInFiltered = displayItems.findIndex((d) =>
+			d.type === 'model' ? d.item.value === value : d.items.some((i) => i.value === value)
+		);
 
 		if (selectedInFiltered >= 0) {
 			// The selected model is visible in the current filter
@@ -478,9 +521,35 @@
 	let listScrollTop = 0;
 	let listContainer;
 
+	// ///////////
+	// Tag group flyout
+	// ///////////
+
+	let hoveredGroupValue = null;
+	let flyoutPosition = { top: 0, left: 0 };
+	let flyoutCloseTimer;
+
+	const openGroupFlyout = (e, group) => {
+		clearTimeout(flyoutCloseTimer);
+		const rect = e.currentTarget.getBoundingClientRect();
+		flyoutPosition = { top: rect.top, left: rect.right + 6 };
+		hoveredGroupValue = group.value;
+	};
+
+	const scheduleCloseFlyout = () => {
+		clearTimeout(flyoutCloseTimer);
+		flyoutCloseTimer = setTimeout(() => {
+			hoveredGroupValue = null;
+		}, 150);
+	};
+
+	const cancelCloseFlyout = () => {
+		clearTimeout(flyoutCloseTimer);
+	};
+
 	$: visibleStart = Math.max(0, Math.floor(listScrollTop / ITEM_HEIGHT) - OVERSCAN);
 	$: visibleEnd = Math.min(
-		filteredItems.length,
+		displayItems.length,
 		Math.ceil((listScrollTop + 256) / ITEM_HEIGHT) + OVERSCAN
 	);
 </script>
@@ -567,13 +636,14 @@
 								autocomplete="off"
 								aria-label={$i18n.t('Search In Models')}
 								on:keydown={(e) => {
-									if (e.code === 'Enter' && filteredItems.length > 0) {
-										value = filteredItems[selectedModelIdx].value;
+									if (e.code === 'Enter' && displayItems.length > 0) {
+										const selected = displayItems[selectedModelIdx];
+										value = selected.type === 'group' ? selected.items[0].value : selected.item.value;
 										show = false;
 										return; // dont need to scroll on selection
 									} else if (e.code === 'ArrowDown') {
 										e.stopPropagation();
-										selectedModelIdx = Math.min(selectedModelIdx + 1, filteredItems.length - 1);
+										selectedModelIdx = Math.min(selectedModelIdx + 1, displayItems.length - 1);
 									} else if (e.code === 'ArrowUp') {
 										e.stopPropagation();
 										selectedModelIdx = Math.max(selectedModelIdx - 1, 0);
@@ -694,7 +764,7 @@
 					</div>
 
 					<div class="px-2.5 group relative">
-						{#if filteredItems.length === 0}
+						{#if displayItems.length === 0}
 							{#if items.length === 0 && $user?.role === 'admin'}
 								<div class="flex flex-col items-start justify-center py-6 px-4 text-start">
 									<div class="text-sm font-medium text-gray-900 dark:text-gray-100 mb-1">
@@ -732,26 +802,95 @@
 								}}
 							>
 								<div style="height: {visibleStart * ITEM_HEIGHT}px;" />
-								{#each filteredItems.slice(visibleStart, visibleEnd) as item, i (item.value)}
+								{#each displayItems.slice(visibleStart, visibleEnd) as displayItem, i (displayItem.value)}
 									{@const index = visibleStart + i}
-									<ModelItem
-										{selectedModelIdx}
-										{item}
-										{index}
-										{value}
-										{pinModelHandler}
-										{unloadModelHandler}
-										{deleteModelHandler}
-										onClick={() => {
-											value = item.value;
-											selectedModelIdx = index;
+									{#if displayItem.type === 'group'}
+										<!-- svelte-ignore a11y-no-static-element-interactions -->
+										<div
+											class="relative"
+											on:mouseenter={(e) => openGroupFlyout(e, displayItem)}
+											on:mouseleave={scheduleCloseFlyout}
+										>
+											<button
+												type="button"
+												class="flex w-full items-center gap-2 rounded-xl py-2 pl-3 pr-1.5 text-sm font-medium text-gray-700 dark:text-gray-100 outline-hidden transition-all duration-75 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer {index ===
+											selectedModelIdx
+												? 'bg-gray-100 dark:bg-gray-800'
+												: ''}"
+												data-arrow-selected={index === selectedModelIdx}
+												aria-haspopup="true"
+												aria-expanded={hoveredGroupValue === displayItem.value}
+												on:click={(e) => openGroupFlyout(e, displayItem)}
+											>
+												<img
+													src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${displayItem.items[0].model.id}&lang=${$i18n.language}`}
+													alt={displayItem.label}
+													class="rounded-full size-5"
+													loading="lazy"
+													on:error={(e) => {
+														e.currentTarget.src = '/favicon.png';
+													}}
+												/>
+												<div class="line-clamp-1 flex-1 text-left">{displayItem.label}</div>
+												<div
+													class="text-xs text-gray-400 dark:text-gray-500 shrink-0 tabular-nums"
+												>
+													{displayItem.items.length}
+												</div>
+												<ChevronDown className="size-3 shrink-0 -rotate-90" />
+											</button>
+										</div>
+									{:else}
+										<ModelItem
+											{selectedModelIdx}
+											item={displayItem.item}
+											{index}
+											{value}
+											{pinModelHandler}
+											{unloadModelHandler}
+											{deleteModelHandler}
+											onClick={() => {
+												value = displayItem.item.value;
+												selectedModelIdx = index;
 
-											show = false;
-										}}
-									/>
+												show = false;
+											}}
+										/>
+									{/if}
 								{/each}
-								<div style="height: {(filteredItems.length - visibleEnd) * ITEM_HEIGHT}px;" />
+								<div style="height: {(displayItems.length - visibleEnd) * ITEM_HEIGHT}px;" />
 							</div>
+						{/if}
+
+						{#if hoveredGroupValue}
+							{@const hoveredGroup = displayItems.find((d) => d.value === hoveredGroupValue)}
+							{#if hoveredGroup}
+								<!-- svelte-ignore a11y-no-static-element-interactions -->
+								<div
+									class="fixed z-[9999] w-64 max-h-64 overflow-y-auto p-1 rounded-2xl bg-white dark:bg-gray-850 shadow-lg border border-gray-100 dark:border-gray-800"
+									style="top: {flyoutPosition.top}px; left: {flyoutPosition.left}px;"
+									on:mouseenter={cancelCloseFlyout}
+									on:mouseleave={scheduleCloseFlyout}
+									transition:fly={{ x: -6, duration: 120 }}
+								>
+									{#each hoveredGroup.items as groupItem, i (groupItem.value)}
+										<ModelItem
+											selectedModelIdx={-1}
+											item={groupItem}
+											index={-1}
+											{value}
+											{pinModelHandler}
+											{unloadModelHandler}
+											{deleteModelHandler}
+											onClick={() => {
+												value = groupItem.value;
+												hoveredGroupValue = null;
+												show = false;
+											}}
+										/>
+									{/each}
+								</div>
+							{/if}
 						{/if}
 
 						{#if !(searchValue.trim() in $MODEL_DOWNLOAD_POOL) && searchValue && ollamaVersion && $user?.role === 'admin'}

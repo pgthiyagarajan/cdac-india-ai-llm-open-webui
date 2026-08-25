@@ -1652,13 +1652,13 @@
 
 	{#if !$mobile}
 		<div
-			class="relative flex items-center justify-center group border-l border-gray-50 dark:border-gray-850/30 hover:border-gray-200 dark:hover:border-gray-800 transition z-20"
+			class="relative flex items-center justify-center group border-l border-gray-50 dark:border-gray-850/30 hover:border-gray-200 dark:hover:border-gray-800 transition z-[60]"
 			id="sidebar-resizer"
 			on:mousedown={resizeStartHandler}
 			role="separator"
 		>
 			<div
-				class=" absolute -left-1.5 -right-1.5 -top-0 -bottom-0 z-20 cursor-col-resize bg-transparent"
+				class=" absolute -left-1.5 -right-1.5 -top-0 -bottom-0 z-[60] cursor-col-resize bg-transparent"
 			/>
 		</div>
 	{/if}

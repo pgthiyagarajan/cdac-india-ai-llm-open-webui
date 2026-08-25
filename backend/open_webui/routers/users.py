@@ -605,6 +605,12 @@ async def update_user_by_id(
             await Auths.update_email_by_id(user_id, form_data.email.lower(), db=db)
         if form_data.profile_image_url is not None:
             update_data['profile_image_url'] = form_data.profile_image_url
+        if form_data.department is not None:
+            update_data['department'] = form_data.department
+        if form_data.designation is not None:
+            update_data['designation'] = form_data.designation
+        if form_data.mobile_number is not None:
+            update_data['mobile_number'] = form_data.mobile_number
 
         if update_data:
             updated_user = await Users.update_user_by_id(

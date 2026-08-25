@@ -61,6 +61,11 @@ class User(Base):  # identity & profile
     date_of_birth = Column(Date, nullable=True)
     timezone = Column(String, nullable=True)
 
+    # Registration details (collected at signup)
+    department = Column(String, nullable=True)
+    designation = Column(String, nullable=True)
+    mobile_number = Column(String, nullable=True)
+
     # Online status
     presence_state = Column(String, nullable=True)
     status_emoji = Column(String, nullable=True)
@@ -98,6 +103,10 @@ class UserModel(BaseModel):
     gender: str | None = None
     date_of_birth: datetime.date | None = None
     timezone: str | None = None
+
+    department: str | None = None
+    designation: str | None = None
+    mobile_number: str | None = None
 
     presence_state: str | None = None
     status_emoji: str | None = None
@@ -175,6 +184,12 @@ class UpdateProfileForm(BaseModel):
     @classmethod
     def check_profile_image_url(cls, v: str) -> str:
         return validate_profile_image_url(v)
+
+
+class CompleteProfileForm(BaseModel):
+    department: str | None = None
+    designation: str | None = None
+    mobile_number: str | None = None
 
 
 class UserGroupIdsModel(UserModel):
@@ -258,6 +273,9 @@ class UserUpdateForm(BaseModel):
     email: str | None = None
     profile_image_url: str | None = None
     password: str | None = None
+    department: str | None = None
+    designation: str | None = None
+    mobile_number: str | None = None
 
     @field_validator('profile_image_url', mode='before')
     @classmethod
@@ -277,6 +295,9 @@ class UsersTable:
         role: str = 'pending',
         username: str | None = None,
         oauth: dict | None = None,
+        department: str | None = None,
+        designation: str | None = None,
+        mobile_number: str | None = None,
         db: AsyncSession | None = None,
     ) -> UserModel | None:
         async with get_async_db_context(db) as session:
@@ -292,6 +313,9 @@ class UsersTable:
                     'updated_at': int(time.time()),
                     'username': username,
                     'oauth': oauth,
+                    'department': department,
+                    'designation': designation,
+                    'mobile_number': mobile_number,
                 }
             )
             result = User(**user.model_dump())

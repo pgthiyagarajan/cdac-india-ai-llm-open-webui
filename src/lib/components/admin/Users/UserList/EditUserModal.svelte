@@ -39,7 +39,10 @@
 		role: 'pending',
 		name: '',
 		email: '',
-		password: ''
+		password: '',
+		department: '',
+		designation: '',
+		mobile_number: ''
 	};
 
 	let userGroups: any[] | null = null;
@@ -180,6 +183,51 @@
 												placeholder={$i18n.t('Enter Your Email')}
 												autocomplete="off"
 												required
+											/>
+										</div>
+									</div>
+
+									<div class="flex flex-col w-full">
+										<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Department')}</div>
+
+										<div class="flex-1">
+											<input
+												class="w-full text-sm bg-transparent outline-hidden"
+												type="text"
+												bind:value={_user.department}
+												aria-label={$i18n.t('Department')}
+												placeholder={$i18n.t('Enter Your Department')}
+												autocomplete="off"
+											/>
+										</div>
+									</div>
+
+									<div class="flex flex-col w-full">
+										<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Designation')}</div>
+
+										<div class="flex-1">
+											<input
+												class="w-full text-sm bg-transparent outline-hidden"
+												type="text"
+												bind:value={_user.designation}
+												aria-label={$i18n.t('Designation')}
+												placeholder={$i18n.t('Enter Your Designation')}
+												autocomplete="off"
+											/>
+										</div>
+									</div>
+
+									<div class="flex flex-col w-full">
+										<div class=" mb-1 text-xs text-gray-500">{$i18n.t('Mobile Number')}</div>
+
+										<div class="flex-1">
+											<input
+												class="w-full text-sm bg-transparent outline-hidden"
+												type="tel"
+												bind:value={_user.mobile_number}
+												aria-label={$i18n.t('Mobile Number')}
+												placeholder={$i18n.t('Enter Your Mobile Number')}
+												autocomplete="off"
 											/>
 										</div>
 									</div>

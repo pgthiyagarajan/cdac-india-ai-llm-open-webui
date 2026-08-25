@@ -98,6 +98,15 @@ export const showArchivedChats = writable(false);
 export const showChangelog = writable(false);
 
 export const showControls = writable(false);
+// Registration & Sign-in Guide-style panel, but for the in-app platform
+// user manual — toggled from the Navbar's "?" button (see Navbar.svelte).
+// A plain in-memory store (not localStorage-backed) so it stays open across
+// SPA navigation within the app for the current session, same lifetime as
+// showControls above.
+export const showAppGuide = writable(false);
+// Drag-to-resize width for the AppGuidePanel, same pattern as sidebarWidth
+// above — persisted to localStorage by AppGuidePanel.svelte itself.
+export const appGuideWidth = writable(560);
 export const showEmbeds = writable(false);
 export const showOverview = writable(false);
 export const showArtifacts = writable(false);

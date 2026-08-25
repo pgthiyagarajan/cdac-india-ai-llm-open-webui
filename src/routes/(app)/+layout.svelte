@@ -42,6 +42,7 @@
 	} from '$lib/stores';
 
 	import Sidebar from '$lib/components/layout/Sidebar.svelte';
+	import AppGuidePanel from '$lib/components/layout/AppGuidePanel.svelte';
 	import SettingsModal from '$lib/components/chat/SettingsModal.svelte';
 	import ChangelogModal from '$lib/components/ChangelogModal.svelte';
 	import AccountPending from '$lib/components/layout/Overlay/AccountPending.svelte';
@@ -454,19 +455,23 @@
 					</div>
 				{/if}
 
-				<Sidebar />
+				<div class="flex-1 min-w-0 h-full flex flex-row justify-end">
+					<Sidebar />
 
-				{#if loaded}
-					<slot />
-				{:else}
-					<div
-						class="w-full flex-1 h-full flex items-center justify-center {$showSidebar
-							? '  md:max-w-[calc(100%-var(--sidebar-width))]'
-							: ' '}"
-					>
-						<Spinner className="size-5" />
-					</div>
-				{/if}
+					{#if loaded}
+						<slot />
+					{:else}
+						<div
+							class="w-full flex-1 h-full flex items-center justify-center {$showSidebar
+								? '  md:max-w-[calc(100%-var(--sidebar-width))]'
+								: ' '}"
+						>
+							<Spinner className="size-5" />
+						</div>
+					{/if}
+				</div>
+
+				<AppGuidePanel />
 			{/if}
 		</div>
 	</div>

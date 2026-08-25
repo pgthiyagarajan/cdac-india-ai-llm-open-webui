@@ -296,7 +296,10 @@ export const userSignUp = async (
 	name: string,
 	email: string,
 	password: string,
-	profile_image_url: string
+	profile_image_url: string,
+	department?: string,
+	designation?: string,
+	mobile_number?: string
 ) => {
 	let error = null;
 
@@ -310,7 +313,48 @@ export const userSignUp = async (
 			name: name,
 			email: email,
 			password: password,
-			profile_image_url: profile_image_url
+			profile_image_url: profile_image_url,
+			department: department,
+			designation: designation,
+			mobile_number: mobile_number
+		})
+	})
+		.then(async (res) => {
+			if (!res.ok) throw await res.json();
+			return res.json();
+		})
+		.catch((err) => {
+			console.error(err);
+			error = err.detail;
+			return null;
+		});
+
+	if (error) {
+		throw error;
+	}
+
+	return res;
+};
+
+export const completeUserProfile = async (
+	token: string,
+	department: string,
+	designation: string,
+	mobile_number: string
+) => {
+	let error = null;
+
+	const res = await fetch(`${WEBUI_API_BASE_URL}/auths/complete-profile`, {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/json',
+			...(token && { authorization: `Bearer ${token}` })
+		},
+		credentials: 'include',
+		body: JSON.stringify({
+			department: department,
+			designation: designation,
+			mobile_number: mobile_number
 		})
 	})
 		.then(async (res) => {

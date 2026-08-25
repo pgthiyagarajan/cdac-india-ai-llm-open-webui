@@ -428,6 +428,7 @@ from open_webui.env import (
     AUDIT_LOG_LEVEL,
     BYPASS_MODEL_ACCESS_CONTROL,
     CHANGELOG,
+    DATA_DIR,
     DEPLOYMENT_ID,
     ENABLE_AUDIT_GET_REQUESTS,
     ENABLE_COMPRESSION_MIDDLEWARE,
@@ -1475,7 +1476,11 @@ async def submit_feedback_proxy(request: Request, user=Depends(get_verified_user
     comment = payload.get("comment", "").strip()
     if not email or not comment:
         raise HTTPException(status_code=400, detail="Email and comment are required")
-    db_path = os.environ.get("FEEDBACK_DB_PATH", "/app/backend/data/feedback.db")
+    # Default to this app's own DATA_DIR (same convention webui.db and
+    # uploads already use, open_webui/env.py) rather than a Docker-only
+    # absolute path — that hardcoded path doesn't exist outside a container
+    # (e.g. local/Windows dev), which silently failed every write.
+    db_path = os.environ.get("FEEDBACK_DB_PATH", str(DATA_DIR / "feedback.db"))
 
     def _write_feedback():
         conn = _sqlite3.connect(db_path)
